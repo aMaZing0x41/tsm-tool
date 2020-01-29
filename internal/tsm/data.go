@@ -8,5 +8,5 @@ type TSM struct {
 }
 
 func (t TSM) String() string {
-	return fmt.Sprintf("%v", t.FooterIdx)
+	return fmt.Sprintf("TSM Information\n\tFooterIdx: %v,\n\tFooterPos: %v", t.FooterIdx, t.FooterPos)
 }
