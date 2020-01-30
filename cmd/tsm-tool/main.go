@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"hash/crc32"
 	"io"
 	"io/ioutil"
 	"path/filepath"
@@ -48,33 +47,28 @@ func main() {
 		fmt.Println(fileBytes)
 	}
 
-	data := tsm.TSM{}
-	readTSMFile(&data, &fileBytes)
+	data := readTSMFooter(&fileBytes)
+	indexStart := int64(data.FooterPos)
+	readTSMIndexes(indexStart, &fileBytes)
 
-	// // err = binary.ReadAt(reader, binary.BigEndian, &header)
-	// // if err != nil {
-	// // 	panic(err)
-	// // }
-
-	// var header struct {
-	// 	MagicNum [4]byte
-	// 	Version  byte
-	// }
-
-	// err = binary.Read(reader, binary.BigEndian, &header)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Println(header)
-
-	fmt.Println(data)
+	if *fDebug {
+		fmt.Println(data)
+	}
 }
 
-func readTSMFile(data *tsm.TSM, fileBytes *[]byte) {
+// readTSMFooter reades the footer information. This includes the start position for the indexes.
+// returns a tsm.Footer with the positions populated. Panics if cannot read.
+func readTSMFooter(fileBytes *[]byte) tsm.Footer {
 	reader := bytes.NewReader(*fileBytes)
+	data := tsm.Footer{}
+
+	// TODO: these two lines should probably live somewhere else
+	// this is easy b/c we have a reader and bytes
+	fmt.Println("Reading TSM File")
+	fmt.Println("File Size", reader.Size(), "bytes")
 
 	// Read the footer to get the start position of the TSM index in the file
-	pos, err := reader.Seek(-8, io.SeekEnd)
+	pos, err := reader.Seek(-tsm.FooterSize, io.SeekEnd)
 	if err != nil {
 		fmt.Println("Read footer failed!")
 		panic(err)
@@ -87,19 +81,28 @@ func readTSMFile(data *tsm.TSM, fileBytes *[]byte) {
 		panic(err)
 	}
 	data.FooterPos = fpos
+	return data
+}
+
+// TODO: convert all of the binary reads to a helper call in the tsm package (binary_reader)
+// TODO: create an index struct and store the information for each index so that we can use it later to iterate over the blocks
+// TODO: needs unit tests!
+// readTSMIndexes seeks the reader to the start of the indexes, reads data, and moves the position to the end of that index.
+// contiues until all indexs are read.
+func readTSMIndexes(indexPos int64, fileBytes *[]byte) {
+	reader := bytes.NewReader(*fileBytes)
 
 	// Seek to the begining of the indexes
-	pos, err = reader.Seek(int64(data.FooterPos), io.SeekStart)
+	pos, err := reader.Seek(indexPos, io.SeekStart)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(data)
 
-	fmt.Println("Reading TSM Blocks...")
-	i := 1
-	for {
+	fmt.Println("Reading TSM Indexes")
+	for i := 1; pos < reader.Size()-tsm.FooterSize; i++ {
+		fmt.Println("pos", pos)
 		fmt.Println("***********************")
-		fmt.Println("Block", i)
+		fmt.Println("Index", i)
 		fmt.Println("***********************")
 
 		// Get key_len
@@ -156,43 +159,61 @@ func readTSMFile(data *tsm.TSM, fileBytes *[]byte) {
 		}
 		fmt.Println("Block Size")
 		fmt.Println(bSize)
-
-		// Get CRC!!
-		_, err = reader.Seek(int64(bOffset), io.SeekStart)
+		pos, err = reader.Seek(0, io.SeekCurrent)
 		if err != nil {
+			fmt.Println("Failed to get index position")
 			panic(err)
 		}
-
-		var crcBuf = make([]byte, 4)
-		_, err = reader.Read(crcBuf)
-		if err != nil {
-			panic(err)
-		}
-		crcReader := bytes.NewReader(crcBuf)
-		var crc uint32
-		err = binary.Read(crcReader, binary.BigEndian, &crc)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println("crc ")
-		fmt.Println(crc)
-
-		var blockBuf = make([]byte, bSize-4)
-		_, err = reader.Read(blockBuf)
-		if err != nil {
-			panic(err)
-		}
-		crcVal := crc32.ChecksumIEEE(blockBuf)
-		fmt.Println("crcVal ")
-		fmt.Println(crcVal)
-
-		// currPos, err := reader.Seek(0, io.SeekCurrent)
-		// if err != nil {
-		// 	panic(err)
-		// }
-		// if currPos >= int64(footer.Pos) {
-		// 	break
-		// }
-		i = i + 1
 	}
+	fmt.Println("Read TSM Indexes")
+}
+
+// TODO: before this func can be lit up, the readTSMIndexes func must collect and store all of the information
+// about each index. We can then iterate over the index information and read each block and get the CRC etc.
+func readTSMBlock(offset int64, fileBytes *[]byte) {
+	fmt.Println("Reading TSM Blocks...")
+	// i := 1
+	// for {
+	// 	fmt.Println("***********************")
+	// 	fmt.Println("Block", i)
+	// 	fmt.Println("***********************")
+
+	// 	// Get CRC!!
+	// 	_, err = reader.Seek(int64(bOffset), io.SeekStart)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+
+	// 	var crcBuf = make([]byte, 4)
+	// 	_, err = reader.Read(crcBuf)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	crcReader := bytes.NewReader(crcBuf)
+	// 	var crc uint32
+	// 	err = binary.Read(crcReader, binary.BigEndian, &crc)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	fmt.Println("crc ")
+	// 	fmt.Println(crc)
+
+	// 	var blockBuf = make([]byte, bSize-4)
+	// 	_, err = reader.Read(blockBuf)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	crcVal := crc32.ChecksumIEEE(blockBuf)
+	// 	fmt.Println("crcVal ")
+	// 	fmt.Println(crcVal)
+
+	// 	// currPos, err := reader.Seek(0, io.SeekCurrent)
+	// 	// if err != nil {
+	// 	// 	panic(err)
+	// 	// }
+	// 	// if currPos >= int64(footer.Pos) {
+	// 	// 	break
+	// 	// }
+	// 	i = i + 1
+	// }
 }
