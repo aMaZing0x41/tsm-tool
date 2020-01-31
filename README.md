@@ -1,3 +1,4 @@
+[![Actions Status](https://github.com/amazing0x41/tsm-tool/workflows/Go/badge.svg)](https://github.com/amazing0x41/tsm-tool/actions)
 # tsm-tool
 A tool for checking influx tsm files
 
