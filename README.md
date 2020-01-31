@@ -14,3 +14,5 @@ A tool for checking influx tsm files
 - better error handling
 - better logging
 - more unit/integration tests with larger and more complex TSM files
+- better output formatting
+- better output control - show indexes, show CRC, etc.
